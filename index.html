@@ -89,6 +89,7 @@
         let highlightLinks = new Set();
         let searchFilter = '';
         let searchTimeout = null;
+
         // Keep a COPY of edges with string IDs (force-graph mutates source/target to objects)
         let edgeIndex = [];
 
@@ -107,30 +108,46 @@
             return folderColors[folder];
         }
 
+        function nodeId(n) {
+            return (typeof n === 'object' && n !== null) ? n.id : n;
+        }
+
         function matchesSearch(node) {
             if (!searchFilter) return true;
-            var term = searchFilter.toLowerCase();
+            const term = searchFilter.toLowerCase();
             return (node.title || '').toLowerCase().includes(term) ||
                    (node.folder || '').toLowerCase().includes(term) ||
                    (node.id || '').toLowerCase().includes(term);
         }
 
         function getNodeOpacity(node) {
-            if (highlightNodes.size > 0) return highlightNodes.has(node.id) ? 1.0 : 0.15;
-            if (searchFilter) return matchesSearch(node) ? 1.0 : 0.15;
+            if (highlightNodes.size > 0) {
+                return highlightNodes.has(node.id) ? 1.0 : 0.15;
+            }
+            if (searchFilter) {
+                return matchesSearch(node) ? 1.0 : 0.15;
+            }
             return 1.0;
+        }
+
+        function getLinkKey(link) {
+            return nodeId(link.source) + '|' + nodeId(link.target);
         }
 
         // --- LOAD DATA ---
         async function loadGraphData() {
             try {
-                var response = await fetch('graph-data.json');
+                const response = await fetch('graph-data.json');
                 if (!response.ok) throw new Error('Failed to load: ' + response.status);
                 graphData = await response.json();
-                // Store edge index BEFORE force-graph mutates source/target to objects
-                edgeIndex = graphData.edges.map(function(e) {
-                    return { source: e.source, target: e.target, type: e.type };
-                });
+
+                // Store edge index BEFORE force-graph mutates the data
+                edgeIndex = graphData.edges.map(e => ({
+                    source: e.source,
+                    target: e.target,
+                    type: e.type
+                }));
+
                 initializeGraph();
                 updateStats();
             } catch (error) {
@@ -142,17 +159,19 @@
 
         // --- INIT GRAPH ---
         function initializeGraph() {
-            var nodes = graphData.nodes.map(function(node) {
-                return Object.assign({}, node, {
-                    color: getFolderColor(node.folder),
-                    size: Math.max(4, Math.min(20, 4 + node.link_count * 4))
-                });
-            });
-            var links = graphData.edges.map(function(edge) {
-                return { source: edge.source, target: edge.target, type: edge.type };
-            });
+            const nodes = graphData.nodes.map(node => ({
+                ...node,
+                color: getFolderColor(node.folder),
+                size: Math.max(4, Math.min(20, 4 + node.link_count * 4))
+            }));
 
-            var container = document.querySelector('#graph-container');
+            const links = graphData.edges.map(edge => ({
+                source: edge.source,
+                target: edge.target,
+                type: edge.type
+            }));
+
+            const container = document.querySelector('#graph-container');
             container.innerHTML = '';
 
             graph = ForceGraph()(container)
@@ -161,56 +180,71 @@
                 .width(container.clientWidth)
                 .height(container.clientHeight)
                 .backgroundColor('#1a1a2e')
+                // Spread nodes out: strong repulsion, long link distance
+                .d3Force('charge', d3.forceManyBody().strength(-400))
+                .d3Force('link', d3.forceLink().id(d => d.id).distance(120))
+                .d3Force('center', d3.forceCenter())
+                .d3Force('collide', d3.forceCollide().radius(d => (d.size || 5) + 15))
+                .cooldownTime(3000)
 
                 // --- NODE RENDERING: circle + label ---
-                .nodeCanvasObject(function(node, ctx, globalScale) {
-                    var size = node.size || 5;
-                    var opacity = getNodeOpacity(node);
-                    var isSelected = (selectedNode === node.id);
-                    var isHighlighted = highlightNodes.has(node.id);
+                .nodeCanvasObject((node, ctx, globalScale) => {
+                    const size = node.size || 5;
+                    const opacity = getNodeOpacity(node);
+                    const isSelected = (selectedNode === node.id);
+                    const isHighlighted = highlightNodes.has(node.id);
 
+                    // Draw circle
                     ctx.globalAlpha = opacity;
                     ctx.beginPath();
                     ctx.arc(node.x, node.y, size, 0, 2 * Math.PI);
                     ctx.fillStyle = node.color || '#999';
                     ctx.fill();
 
+                    // Selection/highlight ring
                     if (isSelected) {
-                        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+                        ctx.strokeStyle = '#fff';
+                        ctx.lineWidth = 2;
+                        ctx.stroke();
                     } else if (isHighlighted) {
-                        ctx.strokeStyle = '#1e90ff'; ctx.lineWidth = 1.5; ctx.stroke();
+                        ctx.strokeStyle = '#1e90ff';
+                        ctx.lineWidth = 1.5;
+                        ctx.stroke();
                     }
 
-                    // Draw text label
+                    // Draw text label (only when zoomed in enough)
                     if (globalScale > 0.7 || isSelected || isHighlighted) {
-                        var label = node.title || node.id;
-                        var fontSize = Math.max(10, 12 / globalScale);
+                        const label = node.title || node.id;
+                        const fontSize = Math.max(10, 12 / globalScale);
                         ctx.font = fontSize + 'px sans-serif';
                         ctx.textAlign = 'center';
                         ctx.textBaseline = 'top';
                         ctx.fillStyle = 'rgba(255,255,255,' + (opacity * 0.9) + ')';
                         ctx.fillText(label, node.x, node.y + size + 2);
                     }
+
                     ctx.globalAlpha = 1;
                 })
-                .nodePointerAreaPaint(function(node, color, ctx) {
+                .nodePointerAreaPaint((node, color, ctx) => {
+                    const size = node.size || 5;
                     ctx.fillStyle = color;
                     ctx.beginPath();
-                    ctx.arc(node.x, node.y, (node.size || 5) + 3, 0, 2 * Math.PI);
+                    ctx.arc(node.x, node.y, size + 3, 0, 2 * Math.PI);
                     ctx.fill();
                 })
 
-                // --- LINK RENDERING (custom canvas for dashed + proper colors) ---
-                .linkCanvasObject(function(link, ctx) {
-                    var src = link.source;
-                    var tgt = link.target;
+                // --- LINK RENDERING ---
+                .linkCanvasObject((link, ctx, globalScale) => {
+                    const src = link.source;
+                    const tgt = link.target;
                     if (!src || !tgt || src.x == null || tgt.x == null) return;
 
-                    var key = src.id + '|' + tgt.id;
-                    var isHighlighted = highlightLinks.has(key);
-                    var isBroken = link.type === 'broken';
+                    const key = src.id + '|' + tgt.id;
+                    const isHighlighted = highlightLinks.has(key);
+                    const isBroken = link.type === 'broken';
 
-                    var opacity = 0.6;
+                    // Determine opacity
+                    let opacity = 0.6;
                     if (highlightLinks.size > 0) {
                         opacity = isHighlighted ? 1.0 : 0.08;
                     } else if (searchFilter) {
@@ -221,10 +255,12 @@
                     ctx.beginPath();
 
                     if (isBroken) {
+                        // Dashed line
                         ctx.setLineDash([5, 4]);
                         ctx.strokeStyle = isHighlighted ? '#ff6b8a' : '#e94560';
                         ctx.lineWidth = isHighlighted ? 2.5 : 1.5;
                     } else {
+                        // Solid line
                         ctx.setLineDash([]);
                         ctx.strokeStyle = isHighlighted ? '#5dade2' : '#aaaaaa';
                         ctx.lineWidth = isHighlighted ? 2.5 : 1.5;
@@ -236,9 +272,9 @@
                     ctx.setLineDash([]);
                     ctx.globalAlpha = 1;
                 })
-                .linkPointerAreaPaint(function(link, color, ctx) {
-                    var src = link.source;
-                    var tgt = link.target;
+                .linkPointerAreaPaint((link, color, ctx) => {
+                    const src = link.source;
+                    const tgt = link.target;
                     if (!src || !tgt || src.x == null || tgt.x == null) return;
                     ctx.strokeStyle = color;
                     ctx.lineWidth = 6;
@@ -249,12 +285,13 @@
                 })
 
                 // --- EVENTS ---
-                .onNodeClick(function(node) {
+                .onNodeClick(node => {
                     selectedNode = node.id;
                     rebuildHighlights(node.id);
                     updateNodeInfo(node);
+                    graph.refresh();
                 })
-                .onNodeHover(function(node) {
+                .onNodeHover(node => {
                     if (selectedNode) return;
                     if (node) {
                         rebuildHighlights(node.id);
@@ -262,38 +299,54 @@
                         highlightNodes.clear();
                         highlightLinks.clear();
                     }
+                    graph.refresh();
                 })
-                .onBackgroundClick(function() {
+                .onBackgroundClick(() => {
                     selectedNode = null;
                     highlightNodes.clear();
                     highlightLinks.clear();
                     updateNodeInfo(null);
+                    graph.refresh();
                 });
 
-            setTimeout(function() { graph.zoomToFit(400, 60); }, 1000);
+            // Zoom to fit after simulation settles
+            setTimeout(() => graph.zoomToFit(400, 60), 1000);
 
-            window.addEventListener('resize', function() {
-                if (graph) graph.width(container.clientWidth).height(container.clientHeight);
+            // Handle window resize
+            window.addEventListener('resize', () => {
+                if (graph) {
+                    graph.width(container.clientWidth).height(container.clientHeight);
+                }
             });
         }
 
-        // --- HIGHLIGHT (uses edgeIndex with original string IDs) ---
+        // --- HIGHLIGHT LOGIC (uses edgeIndex with original string IDs) ---
         function rebuildHighlights(nid) {
             highlightNodes.clear();
             highlightLinks.clear();
             highlightNodes.add(nid);
-            edgeIndex.forEach(function(e) {
-                if (e.source === nid) { highlightNodes.add(e.target); highlightLinks.add(e.source + '|' + e.target); }
-                if (e.target === nid) { highlightNodes.add(e.source); highlightLinks.add(e.source + '|' + e.target); }
+
+            edgeIndex.forEach(e => {
+                if (e.source === nid) {
+                    highlightNodes.add(e.target);
+                    highlightLinks.add(e.source + '|' + e.target);
+                }
+                if (e.target === nid) {
+                    highlightNodes.add(e.source);
+                    highlightLinks.add(e.source + '|' + e.target);
+                }
             });
         }
 
-        // --- NODE INFO ---
+        // --- NODE INFO PANEL ---
         function updateNodeInfo(node) {
-            var panel = document.querySelector('#nodeInfo');
-            if (!node) { panel.innerHTML = '<p>Click a node to view details</p>'; return; }
-            var tags = (node.tags && node.tags.length > 0)
-                ? node.tags.map(function(t) { return '<span class="tag">' + t + '</span>'; }).join('')
+            const panel = document.querySelector('#nodeInfo');
+            if (!node) {
+                panel.innerHTML = '<p>Click a node to view details</p>';
+                return;
+            }
+            const tags = (node.tags && node.tags.length > 0)
+                ? node.tags.map(t => '<span class="tag">' + t + '</span>').join('')
                 : '';
             panel.innerHTML =
                 '<div class="label">Title</div><div class="value">' + node.title + '</div>' +
@@ -314,9 +367,11 @@
             document.querySelector('#brokenCount').textContent = m.broken_links.length;
         }
 
-        // --- SEARCH (canvas callbacks read searchFilter reactively on each frame) ---
+        // --- SEARCH ---
         document.querySelector('#searchInput').addEventListener('input', function(e) {
             searchFilter = e.target.value;
+            // Must call refresh — canvas stops repainting after simulation cools
+            if (graph) graph.refresh();
         });
 
         // --- RESET ---
@@ -328,8 +383,9 @@
             document.querySelector('#searchInput').value = '';
             updateNodeInfo(null);
             if (graph) {
+                // Slightly reheat simulation to force repaint
                 graph.d3ReheatSimulation();
-                setTimeout(function() { graph.zoomToFit(400, 60); }, 300);
+                setTimeout(() => graph.zoomToFit(400, 60), 300);
             }
         });
 
