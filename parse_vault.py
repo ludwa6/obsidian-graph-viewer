@@ -6,13 +6,21 @@ import os
 import re
 import sys
 from pathlib import Path
-from datetime import datetime
+from datetime import date, datetime
 from typing import Dict, List, Set, Tuple, Any
 
 try:
     import yaml
 except ImportError:
     yaml = None
+
+
+class DateEncoder(json.JSONEncoder):
+    """Handle date/datetime objects from YAML frontmatter."""
+    def default(self, obj):
+        if isinstance(obj, (date, datetime)):
+            return obj.isoformat()
+        return super().default(obj)
 
 
 def normalize_node_id(file_path: Path, vault_root: Path) -> str:
@@ -149,7 +157,7 @@ def main():
     output_file = sys.argv[2] if len(sys.argv) > 2 else None
     try:
         graph_data = parse_vault(vault_path)
-        output_json = json.dumps(graph_data, indent=2)
+        output_json = json.dumps(graph_data, indent=2, cls=DateEncoder)
         if output_file:
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(output_json)
