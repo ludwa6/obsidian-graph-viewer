@@ -22,6 +22,29 @@
     .main{flex:1;display:flex;overflow:hidden;position:relative}
     .graph-container{flex:1;position:relative}
     .graph-container svg{display:block;width:100%;height:100%}
+
+    /* Filter panel */
+    .filter-panel{position:absolute;top:16px;left:16px;width:220px;background:rgba(17,24,39,.94);backdrop-filter:blur(12px);border:1px solid var(--border);border-radius:12px;z-index:6;font-size:12px;max-height:calc(100vh - 180px);display:flex;flex-direction:column}
+    .filter-header{display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;user-select:none;border-bottom:1px solid var(--border)}
+    .filter-header:hover{background:rgba(99,102,241,.08)}
+    .filter-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)}
+    .filter-toggle-icon{font-size:14px;color:var(--text-dim);transition:transform .2s}
+    .filter-toggle-icon.collapsed{transform:rotate(-90deg)}
+    .filter-body{overflow-y:auto;padding:10px 14px 14px;flex:1}
+    .filter-body.collapsed{display:none}
+    .filter-section{margin-bottom:12px}
+    .filter-section:last-child{margin-bottom:0}
+    .filter-section-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:6px}
+    .filter-row{display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer}
+    .filter-row:hover{color:var(--text)}
+    .filter-row input[type="checkbox"]{accent-color:var(--accent);cursor:pointer;width:14px;height:14px;flex-shrink:0}
+    .filter-row label{cursor:pointer;display:flex;align-items:center;gap:6px;flex:1;min-width:0}
+    .filter-row .tag-label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .filter-row .tag-count{font-size:10px;color:var(--text-dim);flex-shrink:0}
+    .filter-row .tag-swatch{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+    .tag-select-all{font-size:10px;color:var(--accent);cursor:pointer;margin-left:auto;padding:2px 4px}
+    .tag-select-all:hover{text-decoration:underline}
+
     .legend{position:absolute;bottom:16px;left:16px;background:rgba(17,24,39,.92);backdrop-filter:blur(8px);border:1px solid var(--border);border-radius:12px;padding:14px 18px;font-size:11px;z-index:5}
     .legend-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:8px}
     .legend-grid{display:flex;gap:20px}
@@ -62,7 +85,7 @@
     @keyframes spin{to{transform:rotate(360deg)}}
     .loading-text{margin-top:14px;font-size:13px;color:var(--text-muted)}
     .tag{display:inline-block;background:rgba(99,102,241,.2);color:#a5b4fc;padding:2px 8px;border-radius:4px;font-size:10px;margin:2px 2px 2px 0}
-    @media(max-width:768px){.header{padding:10px 14px}.header h1{font-size:14px}.search-box input{width:140px}.detail-panel{width:260px;min-width:260px}.legend{bottom:10px;left:10px;padding:10px 14px}}
+    @media(max-width:768px){.header{padding:10px 14px}.header h1{font-size:14px}.search-box input{width:140px}.detail-panel{width:260px;min-width:260px}.legend{bottom:10px;left:10px;padding:10px 14px}.filter-panel{width:180px;left:10px;top:10px}}
   </style>
 </head>
 <body>
@@ -79,11 +102,47 @@
     <div class="graph-container" id="graphContainer">
       <svg id="graphSvg"></svg>
       <div class="loading-overlay" id="loadingOverlay"><div class="loading-spinner"></div><div class="loading-text">Loading vault data...</div></div>
-      <div class="legend">
+
+      <!-- Filter Panel -->
+      <div class="filter-panel" id="filterPanel">
+        <div class="filter-header" id="filterHeader">
+          <span class="filter-title">Filters</span>
+          <span class="filter-toggle-icon" id="filterToggleIcon">▾</span>
+        </div>
+        <div class="filter-body" id="filterBody">
+          <!-- Display toggles -->
+          <div class="filter-section">
+            <div class="filter-section-label">Display</div>
+            <div class="filter-row">
+              <input type="checkbox" id="filterOrphans" checked />
+              <label for="filterOrphans">Show orphans</label>
+            </div>
+            <div class="filter-row">
+              <input type="checkbox" id="filterBroken" checked />
+              <label for="filterBroken">Show broken links</label>
+            </div>
+            <div class="filter-row">
+              <input type="checkbox" id="filterExistingOnly" />
+              <label for="filterExistingOnly">Existing files only</label>
+            </div>
+          </div>
+          <!-- Tag edges section (populated dynamically) -->
+          <div class="filter-section" id="tagEdgesSection" style="display:none">
+            <div style="display:flex;align-items:center;gap:4px">
+              <span class="filter-section-label" style="margin-bottom:0">Tag Edges</span>
+              <span class="tag-select-all" id="tagSelectAll">all</span>
+              <span class="tag-select-all" id="tagSelectNone">none</span>
+            </div>
+            <div id="tagCheckboxes" style="margin-top:6px"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="legend" id="legendPanel">
         <div class="legend-title">Legend</div>
         <div class="legend-grid">
           <div class="legend-col" id="folderLegend"></div>
-          <div class="legend-col">
+          <div class="legend-col" id="edgeLegend">
             <div class="legend-item"><svg width="20" height="3"><line x1="0" y1="1.5" x2="20" y2="1.5" stroke="#aaaaaa" stroke-width="2"/></svg>Wiki link</div>
             <div class="legend-item"><svg width="20" height="3"><line x1="0" y1="1.5" x2="20" y2="1.5" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="5,4"/></svg>Broken link</div>
           </div>
@@ -115,8 +174,16 @@
       '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981',
       '#06b6d4', '#f97316', '#6366f1', '#14b8a6', '#e879f9'
     ];
+    const TAG_EDGE_COLORS = [
+      '#f472b6', '#a78bfa', '#34d399', '#fbbf24', '#60a5fa',
+      '#f87171', '#4ade80', '#c084fc', '#fb923c', '#22d3ee',
+      '#a3e635', '#e879f9', '#facc15', '#38bdf8', '#f43f5e',
+      '#2dd4bf', '#818cf8', '#fb7185', '#86efac', '#fcd34d'
+    ];
     const folderColorMap = {};
+    const tagColorMap = {};
     let colorIdx = 0;
+    let tagColorIdx = 0;
 
     function getFolderColor(folder) {
       const key = folder || '(root)';
@@ -127,6 +194,14 @@
       return folderColorMap[key];
     }
 
+    function getTagColor(tag) {
+      if (!tagColorMap[tag]) {
+        tagColorMap[tag] = TAG_EDGE_COLORS[tagColorIdx % TAG_EDGE_COLORS.length];
+        tagColorIdx++;
+      }
+      return tagColorMap[tag];
+    }
+
     function nodeRadius(d) {
       return Math.max(6, Math.min(22, 6 + d.link_count * 3));
     }
@@ -135,6 +210,14 @@
     let graphData = null;
     let selectedNode = null;
     let simulation = null;
+    let tagIndex = {};        // tag -> [nodeId, ...]
+    let allTagEdges = [];     // precomputed full set of tag edges
+    let filterState = {
+      showOrphans: true,
+      showBroken: true,
+      existingOnly: false,
+      activeTags: new Set()   // tags whose edges are currently shown
+    };
 
     // --- LOAD DATA ---
     async function loadData() {
@@ -142,6 +225,120 @@
       if (!r.ok) throw new Error('Failed to load: ' + r.status);
       return r.json();
     }
+
+    // --- TAG EDGE SYNTHESIS ---
+    function buildTagIndex(nodes) {
+      tagIndex = {};
+      nodes.forEach(n => {
+        const tags = (n.frontmatter && n.frontmatter.tags) || [];
+        tags.forEach(t => {
+          if (!tagIndex[t]) tagIndex[t] = [];
+          tagIndex[t].push(n.id);
+        });
+      });
+    }
+
+    function computeAllTagEdges() {
+      allTagEdges = [];
+      const seen = new Set();
+      Object.entries(tagIndex).forEach(([tag, nodeIds]) => {
+        if (nodeIds.length < 2) return;
+        for (let i = 0; i < nodeIds.length; i++) {
+          for (let j = i + 1; j < nodeIds.length; j++) {
+            const key = nodeIds[i] < nodeIds[j]
+              ? nodeIds[i] + '|' + nodeIds[j] + '|' + tag
+              : nodeIds[j] + '|' + nodeIds[i] + '|' + tag;
+            if (!seen.has(key)) {
+              seen.add(key);
+              allTagEdges.push({
+                source: nodeIds[i],
+                target: nodeIds[j],
+                type: 'tag',
+                tag: tag
+              });
+            }
+          }
+        }
+      });
+    }
+
+    function getActiveTagEdges() {
+      return allTagEdges.filter(e => filterState.activeTags.has(e.tag));
+    }
+
+    // --- BUILD FILTER UI ---
+    function buildFilterUI() {
+      const section = document.getElementById('tagEdgesSection');
+      const container = document.getElementById('tagCheckboxes');
+      container.innerHTML = '';
+
+      // Sort tags by node count descending
+      const sortedTags = Object.entries(tagIndex)
+        .filter(([, ids]) => ids.length >= 2)
+        .sort((a, b) => b[1].length - a[1].length);
+
+      if (sortedTags.length === 0) return;
+      section.style.display = 'block';
+
+      sortedTags.forEach(([tag, nodeIds]) => {
+        const color = getTagColor(tag);
+        const row = document.createElement('div');
+        row.className = 'filter-row';
+        row.innerHTML =
+          '<input type="checkbox" id="tag_' + tag + '" />' +
+          '<label for="tag_' + tag + '">' +
+            '<span class="tag-swatch" style="background:' + color + '"></span>' +
+            '<span class="tag-label">' + tag + '</span>' +
+            '<span class="tag-count">(' + nodeIds.length + ')</span>' +
+          '</label>';
+        const cb = row.querySelector('input');
+        cb.addEventListener('change', () => {
+          if (cb.checked) filterState.activeTags.add(tag);
+          else filterState.activeTags.delete(tag);
+          applyFilters();
+        });
+        container.appendChild(row);
+      });
+
+      // Select all / none
+      document.getElementById('tagSelectAll').addEventListener('click', () => {
+        sortedTags.forEach(([tag]) => filterState.activeTags.add(tag));
+        container.querySelectorAll('input').forEach(cb => cb.checked = true);
+        applyFilters();
+      });
+      document.getElementById('tagSelectNone').addEventListener('click', () => {
+        filterState.activeTags.clear();
+        container.querySelectorAll('input').forEach(cb => cb.checked = false);
+        applyFilters();
+      });
+    }
+
+    // --- FILTER PANEL COLLAPSE ---
+    document.getElementById('filterHeader').addEventListener('click', () => {
+      const body = document.getElementById('filterBody');
+      const icon = document.getElementById('filterToggleIcon');
+      body.classList.toggle('collapsed');
+      icon.classList.toggle('collapsed');
+    });
+
+    // --- DISPLAY FILTER WIRING ---
+    document.getElementById('filterOrphans').addEventListener('change', function() {
+      filterState.showOrphans = this.checked;
+      applyFilters();
+    });
+    document.getElementById('filterBroken').addEventListener('change', function() {
+      filterState.showBroken = this.checked;
+      applyFilters();
+    });
+    document.getElementById('filterExistingOnly').addEventListener('change', function() {
+      filterState.existingOnly = this.checked;
+      if (this.checked) {
+        // Existing-only implies hiding broken links
+        document.getElementById('filterBroken').checked = false;
+        filterState.showBroken = false;
+      }
+      applyFilters();
+    });
 
     // --- RENDER GRAPH ---
     function renderGraph(data) {
@@ -178,7 +375,12 @@
         color: getFolderColor(n.folder)
       }));
 
-      // Prepare edges (broken targets get a phantom node)
+      // Build tag index and precompute all tag edges
+      buildTagIndex(data.nodes);
+      computeAllTagEdges();
+      buildFilterUI();
+
+      // Prepare wikilink edges (broken targets get a phantom node)
       const nodeIds = new Set(nodes.map(n => n.id));
       const phantomNodes = [];
       data.edges.forEach(e => {
@@ -186,24 +388,117 @@
           phantomNodes.push({
             id: e.target, title: e.target, folder: '(broken)',
             tags: [], link_count: 0, radius: 5, color: '#ef4444',
-            phantom: true
+            phantom: true, frontmatter: {}
           });
           nodeIds.add(e.target);
         }
       });
       const allNodes = nodes.concat(phantomNodes);
 
-      const links = data.edges.map(e => ({
+      // Base wikilink edges
+      const baseLinks = data.edges.map(e => ({
         source: e.source,
         target: e.target,
         type: e.type
       }));
 
+      // Store master data for filtering
+      window._masterData = { allNodes, baseLinks, phantomNodes };
+
+      // Apply initial filters
+      applyFiltersInternal(g, svg, zoom, width, height);
+    }
+
+    // --- APPLY FILTERS (re-renders the simulation) ---
+    function applyFilters() {
+      if (!window._masterData) return;
+      const container = document.getElementById('graphContainer');
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      const svg = d3.select('#graphSvg');
+      const g = svg.select('g');
+      const zoom = d3.zoom().scaleExtent([0.2, 4])
+        .on('zoom', e => g.attr('transform', e.transform));
+
+      applyFiltersInternal(g, svg, zoom, width, height);
+    }
+
+    function applyFiltersInternal(g, svg, zoom, width, height) {
+      const { allNodes, baseLinks, phantomNodes } = window._masterData;
+
+      // Determine which tag edges are active
+      const activeTagEdges = getActiveTagEdges();
+
+      // Combine base + tag edges
+      let links = baseLinks.concat(activeTagEdges);
+
+      // Filter: existing files only (hides all phantoms)
+      let visibleNodes = allNodes;
+      if (filterState.existingOnly) {
+        const phantomIds = new Set(phantomNodes.map(n => n.id));
+        visibleNodes = visibleNodes.filter(n => !phantomIds.has(n.id));
+        links = links.filter(l => {
+          const sid = l.source.id || l.source;
+          const tid = l.target.id || l.target;
+          return !phantomIds.has(sid) && !phantomIds.has(tid);
+        });
+      } else if (!filterState.showBroken) {
+        // Hide broken link phantoms and broken-type edges
+        visibleNodes = visibleNodes.filter(n => !n.phantom);
+        links = links.filter(l => l.type !== 'broken');
+      }
+
+      // Build adjacency from current links to determine orphan status
+      const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
+      links = links.filter(l => {
+        const sid = l.source.id || l.source;
+        const tid = l.target.id || l.target;
+        return visibleNodeIds.has(sid) && visibleNodeIds.has(tid);
+      });
+
+      if (!filterState.showOrphans) {
+        // Compute connected set from current links
+        const connected = new Set();
+        links.forEach(l => {
+          connected.add(l.source.id || l.source);
+          connected.add(l.target.id || l.target);
+        });
+        visibleNodes = visibleNodes.filter(n => connected.has(n.id));
+        // Re-filter links
+        const finalIds = new Set(visibleNodes.map(n => n.id));
+        links = links.filter(l => {
+          const sid = l.source.id || l.source;
+          const tid = l.target.id || l.target;
+          return finalIds.has(sid) && finalIds.has(tid);
+        });
+      }
+
+      // Deep-copy nodes to avoid d3 mutation issues across re-renders
+      const renderNodes = visibleNodes.map(n => ({
+        ...n,
+        x: n.x, y: n.y
+      }));
+      const renderLinks = links.map(l => ({
+        source: l.source.id || l.source,
+        target: l.target.id || l.target,
+        type: l.type,
+        tag: l.tag || null
+      }));
+
+      // Clear and re-render
+      g.selectAll('*').remove();
+
+      if (simulation) simulation.stop();
+
       // Force simulation
-      simulation = d3.forceSimulation(allNodes)
-        .force('link', d3.forceLink(links).id(d => d.id)
-          .distance(d => d.type === 'broken' ? 80 : 120)
-          .strength(0.4))
+      simulation = d3.forceSimulation(renderNodes)
+        .force('link', d3.forceLink(renderLinks).id(d => d.id)
+          .distance(d => {
+            if (d.type === 'tag') return 100;
+            if (d.type === 'broken') return 80;
+            return 120;
+          })
+          .strength(d => d.type === 'tag' ? 0.2 : 0.4))
         .force('charge', d3.forceManyBody().strength(-400).distanceMax(400))
         .force('center', d3.forceCenter(width / 2, height / 2))
         .force('collision', d3.forceCollide().radius(d => d.radius + 14))
@@ -212,15 +507,27 @@
 
       // Draw links
       const link = g.append('g').selectAll('line')
-        .data(links).join('line')
-        .attr('stroke', d => d.type === 'broken' ? '#ef4444' : '#aaaaaa')
-        .attr('stroke-width', d => d.type === 'broken' ? 1.5 : 2)
-        .attr('stroke-dasharray', d => d.type === 'broken' ? '5,4' : null)
-        .attr('stroke-opacity', 0.5);
+        .data(renderLinks).join('line')
+        .attr('stroke', d => {
+          if (d.type === 'tag') return getTagColor(d.tag);
+          if (d.type === 'broken') return '#ef4444';
+          return '#aaaaaa';
+        })
+        .attr('stroke-width', d => {
+          if (d.type === 'tag') return 1.2;
+          if (d.type === 'broken') return 1.5;
+          return 2;
+        })
+        .attr('stroke-dasharray', d => {
+          if (d.type === 'broken') return '5,4';
+          if (d.type === 'tag') return '3,3';
+          return null;
+        })
+        .attr('stroke-opacity', d => d.type === 'tag' ? 0.35 : 0.5);
 
       // Draw nodes
       const node = g.append('g').selectAll('g')
-        .data(allNodes).join('g')
+        .data(renderNodes).join('g')
         .attr('cursor', 'pointer')
         .call(d3.drag()
           .on('start', (e, d) => { if (!e.active) simulation.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
@@ -267,7 +574,7 @@
         node.transition().duration(200)
           .attr('opacity', n => {
             if (n.id === d.id) return 1;
-            return links.some(l =>
+            return renderLinks.some(l =>
               ((l.source.id || l.source) === d.id && (l.target.id || l.target) === n.id) ||
               ((l.target.id || l.target) === d.id && (l.source.id || l.source) === n.id)
             ) ? 1 : 0.2;
@@ -279,14 +586,14 @@
         hideTooltip();
         d3.select(this).select('circle').transition().duration(200)
           .attr('r', d.radius);
-        link.transition().duration(200).attr('stroke-opacity', 0.5);
+        link.transition().duration(200).attr('stroke-opacity', l => l.type === 'tag' ? 0.35 : 0.5);
         node.transition().duration(200).attr('opacity', 1);
       });
 
       // Click
       node.on('click', (event, d) => {
         event.stopPropagation();
-        showDetail(d);
+        showDetail(d, renderLinks);
       });
       svg.on('click', () => hideDetail());
 
@@ -298,24 +605,61 @@
         node.attr('transform', d => `translate(${d.x},${d.y})`);
       });
 
-      // Initial zoom
-      setTimeout(() => {
-        svg.transition().duration(800).call(
-          zoom.transform,
-          d3.zoomIdentity.translate(width * 0.05, height * 0.05).scale(0.9)
-        );
-      }, 500);
-
       // Store refs for search
-      window._graphRefs = { node, link, links, allNodes };
+      window._graphRefs = { node, link, links: renderLinks, allNodes: renderNodes };
+
+      // Update stats in legend
+      updateFilteredStats(renderNodes, renderLinks);
+
+      // Update tag edge legend items
+      updateEdgeLegend();
+    }
+
+    // --- UPDATE STATS ---
+    function updateFilteredStats(nodes, links) {
+      const statsEl = document.getElementById('filteredStats');
+      if (statsEl) {
+        const orphanCount = nodes.filter(n => {
+          return !links.some(l =>
+            (l.source.id || l.source) === n.id || (l.target.id || l.target) === n.id
+          );
+        }).length;
+        const wikiLinks = links.filter(l => l.type === 'wikilink').length;
+        const tagLinks = links.filter(l => l.type === 'tag').length;
+        const brokenLinks = links.filter(l => l.type === 'broken').length;
+        statsEl.innerHTML = nodes.length + ' notes \u00b7 ' +
+          wikiLinks + ' wiki \u00b7 ' +
+          tagLinks + ' tag \u00b7 ' +
+          brokenLinks + ' broken \u00b7 ' +
+          orphanCount + ' orphans';
+      }
+    }
+
+    // --- UPDATE EDGE LEGEND ---
+    function updateEdgeLegend() {
+      const col = document.getElementById('edgeLegend');
+      col.innerHTML = '';
+      // Always show wikilink
+      col.innerHTML += '<div class="legend-item"><svg width="20" height="3"><line x1="0" y1="1.5" x2="20" y2="1.5" stroke="#aaaaaa" stroke-width="2"/></svg>Wiki link</div>';
+      if (filterState.showBroken || !filterState.existingOnly) {
+        col.innerHTML += '<div class="legend-item"><svg width="20" height="3"><line x1="0" y1="1.5" x2="20" y2="1.5" stroke="#ef4444" stroke-width="1.5" stroke-dasharray="5,4"/></svg>Broken link</div>';
+      }
+      // Show active tag edge colors
+      filterState.activeTags.forEach(tag => {
+        const color = getTagColor(tag);
+        col.innerHTML += '<div class="legend-item"><svg width="20" height="3"><line x1="0" y1="1.5" x2="20" y2="1.5" stroke="' + color + '" stroke-width="1.2" stroke-dasharray="3,3"/></svg>#' + tag + '</div>';
+      });
     }
 
     // --- TOOLTIP ---
     function showTooltip(d) {
       document.getElementById('tooltipDot').style.background = d.color;
       document.getElementById('tooltipName').textContent = d.title || d.id;
+      const fmTags = (d.frontmatter && d.frontmatter.tags) || [];
       const meta = (d.folder || 'Root') + ' \u00b7 ' + d.link_count + ' link' + (d.link_count !== 1 ? 's' : '') +
-        (d.phantom ? ' \u00b7 Broken target' : '') + ' \u00b7 Click for details';
+        (d.phantom ? ' \u00b7 Broken target' : '') +
+        (fmTags.length > 0 ? ' \u00b7 Tags: ' + fmTags.join(', ') : '') +
+        ' \u00b7 Click for details';
       document.getElementById('tooltipMeta').textContent = meta;
       document.getElementById('tooltip').classList.add('visible');
     }
@@ -324,7 +668,7 @@
     }
 
     // --- DETAIL PANEL ---
-    function showDetail(d) {
+    function showDetail(d, currentLinks) {
       selectedNode = d;
       hideTooltip();
       const panel = document.getElementById('detailPanel');
@@ -336,22 +680,32 @@
       document.getElementById('detailType').textContent = d.phantom ? 'Broken link target' : (d.folder || 'Root');
 
       // Stats
+      const connCount = currentLinks ? currentLinks.filter(l => {
+        const sid = l.source.id || l.source;
+        const tid = l.target.id || l.target;
+        return sid === d.id || tid === d.id;
+      }).length : d.link_count;
       document.getElementById('statsGrid').innerHTML = [
-        { label: 'Links', value: d.link_count, color: d.color },
+        { label: 'Links', value: connCount, color: d.color },
         { label: 'Folder', value: d.folder ? d.folder.split('/').pop() : 'Root', color: d.color }
       ].map(s => '<div class="stat-box"><div class="stat-value" style="color:' + s.color + '">' + s.value + '</div><div class="stat-label">' + s.label + '</div></div>').join('');
 
       // Tags
+      const fmTags = (d.frontmatter && d.frontmatter.tags) || [];
       const tagsBox = document.getElementById('tagsBox');
-      if (d.tags && d.tags.length > 0) {
+      if (fmTags.length > 0) {
+        tagsBox.style.display = 'block';
+        document.getElementById('tagsContent').innerHTML = fmTags.map(t => '<span class="tag">#' + t + '</span>').join('');
+      } else if (d.tags && d.tags.length > 0) {
         tagsBox.style.display = 'block';
         document.getElementById('tagsContent').innerHTML = d.tags.map(t => '<span class="tag">#' + t + '</span>').join('');
       } else {
         tagsBox.style.display = 'none';
       }
 
-      // Connections
-      const conns = graphData.edges.filter(e => {
+      // Connections (from current filtered links)
+      const linksToUse = currentLinks || (window._graphRefs ? window._graphRefs.links : []);
+      const conns = linksToUse.filter(e => {
         const sid = e.source.id || e.source;
         const tid = e.target.id || e.target;
         return sid === d.id || tid === d.id;
@@ -363,20 +717,18 @@
         const sid = conn.source.id || conn.source;
         const tid = conn.target.id || conn.target;
         const otherId = sid === d.id ? tid : sid;
-        const other = graphData.nodes.find(n => n.id === otherId);
-        const name = other ? (other.title || other.id) : otherId;
-        const isBroken = conn.type === 'broken';
+        const otherNode = window._graphRefs?.allNodes.find(n => n.id === otherId);
+        const name = otherNode ? (otherNode.title || otherNode.id) : otherId;
+        const barColor = conn.type === 'tag' ? getTagColor(conn.tag) : (conn.type === 'broken' ? '#ef4444' : '#aaaaaa');
+        const typeLabel = conn.type === 'tag' ? 'tag: #' + conn.tag : conn.type + (conn.type === 'broken' ? ' (missing)' : '');
         const item = document.createElement('div');
         item.className = 'conn-item';
         item.innerHTML =
-          '<div class="conn-bar" style="background:' + (isBroken ? '#ef4444' : '#aaaaaa') + '"></div>' +
+          '<div class="conn-bar" style="background:' + barColor + '"></div>' +
           '<div><div class="conn-name">' + name + '</div>' +
-          '<div class="conn-type">' + (sid === d.id ? '\u2192' : '\u2190') + ' ' + conn.type + (isBroken ? ' (missing)' : '') + '</div></div>';
-        if (other) {
-          item.addEventListener('click', () => {
-            const otherNode = window._graphRefs?.allNodes.find(n => n.id === otherId);
-            if (otherNode) showDetail(otherNode);
-          });
+          '<div class="conn-type">' + (sid === d.id ? '\u2192' : '\u2190') + ' ' + typeLabel + '</div></div>';
+        if (otherNode) {
+          item.addEventListener('click', () => showDetail(otherNode, linksToUse));
         }
         connList.appendChild(item);
       });
@@ -389,7 +741,7 @@
       document.getElementById('detailPanel').classList.remove('open');
       if (window._graphRefs) {
         window._graphRefs.node.transition().duration(200).attr('opacity', 1);
-        window._graphRefs.link.transition().duration(200).attr('stroke-opacity', 0.5);
+        window._graphRefs.link.transition().duration(200).attr('stroke-opacity', l => l.type === 'tag' ? 0.35 : 0.5);
       }
     }
 
@@ -402,11 +754,12 @@
           if (!q) return 1;
           const name = (d.title || d.id || '').toLowerCase();
           const folder = (d.folder || '').toLowerCase();
-          return name.includes(q) || folder.includes(q) ? 1 : 0.1;
+          const tags = ((d.frontmatter && d.frontmatter.tags) || []).join(' ').toLowerCase();
+          return name.includes(q) || folder.includes(q) || tags.includes(q) ? 1 : 0.1;
         });
       window._graphRefs.link.transition().duration(200)
         .attr('stroke-opacity', l => {
-          if (!q) return 0.5;
+          if (!q) return l.type === 'tag' ? 0.35 : 0.5;
           const sn = (l.source.title || l.source.id || '').toLowerCase();
           const tn = (l.target.title || l.target.id || '').toLowerCase();
           const sf = (l.source.folder || '').toLowerCase();
@@ -443,11 +796,12 @@
 
         const m = data.metadata;
         const statsEl = document.createElement('div');
+        statsEl.id = 'filteredStats';
         statsEl.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px solid var(--border);font-size:10px;color:var(--text-dim)';
         statsEl.innerHTML = m.total_notes + ' notes \u00b7 ' + m.total_links + ' links \u00b7 ' +
           m.folders.length + ' folders \u00b7 ' + m.orphan_notes.length + ' orphans \u00b7 ' +
           m.broken_links.length + ' broken';
-        document.querySelector('.legend').appendChild(statsEl);
+        document.getElementById('legendPanel').appendChild(statsEl);
 
         setTimeout(() => {
           document.getElementById('loadingOverlay').classList.add('hidden');
