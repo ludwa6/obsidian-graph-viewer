@@ -11,9 +11,12 @@ Visit: https://ludwa6.github.io/obsidian-graph-viewer/
 - **Force-directed graph** — notes as nodes, wikilinks as edges
 - **Color by folder** — each folder gets a distinct color
 - **Size by connections** — more links = bigger node
-- **Click to highlight** — click a node to see its neighbors
-- **Search & filter** — find notes by title, folder, or path
-- **Broken link detection** — dashed red edges for missing targets
+- **Click to highlight** — click a node to see its neighbors and open detail panel
+- **Hover to focus** — hover a node to dim unrelated nodes and edges
+- **Search & filter** — find notes by title or folder (dims non-matching nodes)
+- **Broken link detection** — dashed red edges for missing targets, with phantom nodes
+- **Drag nodes** — reposition nodes interactively
+- **Zoom & pan** — scroll to zoom, drag background to pan
 - **Dark theme** — easy on the eyes
 - **Responsive** — works on mobile
 
@@ -29,14 +32,14 @@ Visit: https://ludwa6.github.io/obsidian-graph-viewer/
 
 ## Tech Stack
 
-- **[force-graph](https://github.com/vasturiano/force-graph)** — canvas-based graph rendering via CDN
-- **Vanilla HTML/CSS/JS** — no build step required
+- **[D3.js](https://d3js.org/) v7** — force simulation + SVG rendering via CDN
+- **Vanilla HTML/CSS/JS** — single-file app, no build step required
 - **Python** — vault parser (stdlib + PyYAML)
 
 ## File Structure
 
 ```
-index.html        — Single-file web app (CSS + JS inline)
+index.html        — Single-file web app (CSS + JS inline, uses D3.js for SVG graph)
 graph-data.json   — Generated graph data from your vault
 parse_vault.py    — Python script to parse .md files into graph JSON
 ```
